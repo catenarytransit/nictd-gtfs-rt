@@ -38,7 +38,7 @@ struct NICTDAlert {
     delay: Option<String>,
     reason: Option<String>,
     alert_heading: Option<String>,
-    alert_body: String,
+    alert_body: Option<String>,
 }
 
 fn timestamp_from_str_u64(timestamp: &str) -> Option<u64> {
@@ -60,13 +60,12 @@ pub async fn train_feed(
     client: &reqwest::Client,
 ) -> Result<NICTDResults, Box<dyn std::error::Error + Sync + Send>> {
     
-    // Query CTA Customer Alerts API for alerts
+    let mut alerts: Vec<FeedEntity> = vec![];
+
+    // Query NICTD website for alerts
     let response = client
-        .get("https://www.transitchicago.com/api/1.0/alerts.aspx")
-        .query(&[
-            ("outputType", &"JSON"),
-            ("activeonly", &"true"),
-        ])
+        .get("https://mysouthshoreline.com/service_updates.json")
+        .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0 CatenaryMaps/1.0")
         .send()
         .await;
 
@@ -79,6 +78,9 @@ pub async fn train_feed(
 
     let response = response?;
     let text = response.text().await?;
+
+    // println!("{}", text);
+
     let alerts_data = serde_json::from_str::<Vec<NICTDAlert>>(text.as_str())?;
 
     for alert in alerts_data {
@@ -99,21 +101,27 @@ pub async fn train_feed(
         let effect = Effect::UnknownEffect;
         let cause = Cause::UnknownCause;
 
-        let header_text = match alert.alert_heading {
+        let wrapped_cause_detail = match alert.reason {
             Some(text) => Some(english_only_translations(text)),
             None => None,
         };
-        let description_text = alert.alert_body;
 
-        let severity_level = SeverityLevel::UnknownSeverity;
+        let wrapped_header_text = match alert.alert_heading {
+            Some(text) => Some(english_only_translations(text)),
+            None => None,
+        };
 
-        let wrapped_description_text = match description_text {
+        let wrapped_description_text = match alert.alert_body {
             Some(desc) => Some(english_only_translations(desc)),
             None => None,
         };
 
+        let severity_level = SeverityLevel::UnknownSeverity;
+
+        
+
         alerts.push(FeedEntity {
-            id: alert.created + alert.modified, 
+            id: alert.created + &alert.modified, 
             is_deleted: None,
             trip_update: None,
             vehicle: None,
@@ -123,14 +131,14 @@ pub async fn train_feed(
                 cause: Some(cause.into()),
                 effect: Some(effect.into()),
                 url: None,
-                header_text: header_text,
-                description_text: Some(description_text),
-                tts_header_text: header_text,
-                tts_description_text: Some(description_text),
+                header_text: wrapped_header_text.clone(),
+                description_text: wrapped_description_text.clone(),
+                tts_header_text: wrapped_header_text.clone(),
+                tts_description_text: wrapped_description_text.clone(),
                 severity_level: Some(severity_level.into()),
                 image: None,
                 image_alternative_text: None,
-                cause_detail: None,
+                cause_detail: wrapped_cause_detail,
                 effect_detail: None,
             }),
             shape: None,
@@ -139,35 +147,7 @@ pub async fn train_feed(
         });
     }
 
-    Ok(ChicagoResults {
-        vehicle_positions: gtfs_realtime::FeedMessage {
-            entity: train_positions,
-            header: gtfs_realtime::FeedHeader {
-                timestamp: Some(
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Time went backwards")
-                        .as_secs(),
-                ),
-                gtfs_realtime_version: String::from("2.0"),
-                incrementality: None,
-                feed_version: None,
-            },
-        },
-        trip_updates: gtfs_realtime::FeedMessage {
-            entity: trip_updates,
-            header: gtfs_realtime::FeedHeader {
-                timestamp: Some(
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Time went backwards")
-                        .as_secs(),
-                ),
-                gtfs_realtime_version: String::from("2.0"),
-                incrementality: None,
-                feed_version: None,
-            },
-        },
+    Ok(NICTDResults {
         alerts: gtfs_realtime::FeedMessage {
             entity: alerts,
             header: gtfs_realtime::FeedHeader {
@@ -211,9 +191,9 @@ mod tests {
         )
         .await;
 
-        assert!(train_feeds.is_ok());
-
         println!("{:#?}", train_feeds);
+
+        assert!(train_feeds.is_ok());
     }
 
     /*
