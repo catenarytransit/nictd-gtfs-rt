@@ -22,18 +22,6 @@ sudo apt install libssl-dev protobuf-compiler
 sudo zypper in libopenssl-3-devel protobuf-devel
 ```
 
-### Test data
-
-Download the CTA GTFS timetable and extract it to static/:
-
-```bash
-mkdir -p static/
-cd static
-wget https://www.transitchicago.com/downloads/sch_data/google_transit.zip
-unzip google_transit.zip
-cd ..
-```
-
 ### Testing
 
 Then you can test the library using
