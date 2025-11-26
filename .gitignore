@@ -1,4 +1,2 @@
-/target
-/static
-/tmp
-/tmp-chicago
+target/
+Cargo.lock
