@@ -94,6 +94,7 @@ pub async fn train_feed(
         let informed_entity: Vec<EntitySelector> = vec![
             EntitySelector {
                 agency_id: Some("NICTD".to_string()),
+                route_id: Some("so_shore".to_string()),
                 ..EntitySelector::default()
             }
         ];
