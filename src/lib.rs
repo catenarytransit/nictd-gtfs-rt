@@ -96,6 +96,11 @@ pub async fn train_feed(
                 agency_id: Some("NICTD".to_string()),
                 route_id: Some("so_shore".to_string()),
                 ..EntitySelector::default()
+            },
+            EntitySelector {
+                agency_id: Some("NICTD".to_string()),
+                route_id: Some("mo_co".to_string()),
+                ..EntitySelector::default()
             }
         ];
 
