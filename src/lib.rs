@@ -1,12 +1,11 @@
-use chrono::Datelike;
-use chrono::{DateTime, NaiveDateTime, TimeZone};
-use chrono_tz::America::Chicago;
+use core::time;
 use gtfs_realtime::alert::{Cause, Effect, SeverityLevel};
 use gtfs_realtime::translated_string::Translation;
-use core::time;
 use gtfs_realtime::trip_update::stop_time_update::StopTimeProperties;
 use gtfs_realtime::trip_update::{StopTimeEvent, StopTimeUpdate};
-use gtfs_realtime::{Alert, EntitySelector, FeedEntity, FeedMessage, TimeRange, TranslatedString, stop};
+use gtfs_realtime::{
+    Alert, EntitySelector, FeedEntity, FeedMessage, TimeRange, TranslatedString, stop,
+};
 use inline_colorization::*;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -42,24 +41,23 @@ struct NICTDAlert {
 }
 
 fn timestamp_from_str_u64(timestamp: &str) -> Option<u64> {
-    let time = chrono::DateTime::parse_from_rfc3339(&timestamp).ok()?;
+    let time = timestamp.parse::<jiff::Timestamp>().ok()?;
 
-    Some(time.timestamp() as u64)
+    u64::try_from(time.as_second()).ok()
 }
 
 fn english_only_translations(text: String) -> TranslatedString {
     TranslatedString {
-            translation: vec![Translation {
+        translation: vec![Translation {
             text: text,
             language: Some("en_US".to_string()),
-        }]
+        }],
     }
 }
 
 pub async fn train_feed(
     client: &reqwest::Client,
 ) -> Result<NICTDResults, Box<dyn std::error::Error + Sync + Send>> {
-    
     let mut alerts: Vec<FeedEntity> = vec![];
 
     // Query NICTD website for alerts
@@ -84,12 +82,10 @@ pub async fn train_feed(
     let alerts_data = serde_json::from_str::<Vec<NICTDAlert>>(text.as_str())?;
 
     for alert in alerts_data {
-        let active_period: Vec<TimeRange> = vec![
-            TimeRange {
-                start: timestamp_from_str_u64(&alert.modified),
-                end: None,
-            }
-        ];
+        let active_period: Vec<TimeRange> = vec![TimeRange {
+            start: timestamp_from_str_u64(&alert.modified),
+            end: None,
+        }];
 
         let informed_entity: Vec<EntitySelector> = vec![
             EntitySelector {
@@ -101,7 +97,7 @@ pub async fn train_feed(
                 agency_id: Some("NICTD".to_string()),
                 route_id: Some("mo_co".to_string()),
                 ..EntitySelector::default()
-            }
+            },
         ];
 
         let effect = Effect::UnknownEffect;
@@ -124,10 +120,8 @@ pub async fn train_feed(
 
         let severity_level = SeverityLevel::UnknownSeverity;
 
-        
-
         alerts.push(FeedEntity {
-            id: alert.created + &alert.modified, 
+            id: alert.created + &alert.modified,
             is_deleted: None,
             trip_update: None,
             vehicle: None,
@@ -149,7 +143,7 @@ pub async fn train_feed(
             }),
             shape: None,
             stop: None,
-            trip_modifications: None
+            trip_modifications: None,
         });
     }
 
@@ -201,16 +195,18 @@ mod tests {
 
         assert!(train_feeds.is_ok());
     }
+}
 
-    /*
-    #[tokio::test]
-    async fn test_bus_feed() {
-        let api_key = "Det2nqw85D8TqxqF6SpcYYjfu";
-
-        let bus = reqwest::get(
-            "https://www.ctabustracker.com/bustime/api/v2/getvehicles?key=Det2nqw85D8TqxqF6SpcYYjfu&rt=1"
-        ).await.unwrap().text().await.unwrap();
-
-        println!("{}", bus);
-    }*/
+#[cfg(test)]
+mod jiff_regressions {
+    use super::*;
+    #[test]
+    fn alert_offsets_are_converted_to_the_same_instant() {
+        assert_eq!(
+            timestamp_from_str_u64("2026-11-06T12:00:00-06:00"),
+            timestamp_from_str_u64("2026-11-06T18:00:00Z")
+        );
+        assert!(timestamp_from_str_u64("not a timestamp").is_none());
+        assert!(timestamp_from_str_u64("1969-12-31T23:59:59Z").is_none());
+    }
 }
